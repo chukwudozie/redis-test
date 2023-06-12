@@ -74,7 +74,7 @@ public class RedisDataPush {
         System.out.println("I came here to fetch single record");
         try {
            var acc  = redisService.getData();
-           log.info("PAN FETCHED ===> {}",acc.getPlainData());
+           log.info("PAN FETCHED ===> {}, time of fetch ===> {}",acc.getPlainData(), LocalDateTime.now());
         }catch (Exception e){
             log.error("Exception in record fetch job :: {}", e.getMessage());
         }
