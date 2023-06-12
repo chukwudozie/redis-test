@@ -1,0 +1,6 @@
+version: '3'
+
+services:
+  redis-service:
+    image: registry.gitlab.com/uba-cio-team2/cards/redis-test:0.1
+    build: .
