@@ -1,16 +1,20 @@
 package dev.saha.redis_test.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.saha.redis_test.model.Account;
+import dev.saha.redis_test.repository.AccountsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import redis.clients.jedis.Jedis;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-import static dev.saha.redis_test.utils.CONSTANTS.MY_LIST;
-import static dev.saha.redis_test.utils.CONSTANTS.REDIS_EXPIRATION_TIME;
+import static dev.saha.redis_test.utils.CONSTANTS.*;
 
 @Service
 @RequiredArgsConstructor
@@ -18,7 +22,11 @@ import static dev.saha.redis_test.utils.CONSTANTS.REDIS_EXPIRATION_TIME;
 public class RedisService {
 
 
-
+    @Value("${spring.data.redis.host:localhost}")
+    private String hostname;
+    @Value("${spring.data.redis.port:6379}")
+    private int port;
+    private final AccountsRepository repository;
     private final RedisTemplate<String, Object> redisTemplate;
 
 
@@ -27,7 +35,7 @@ public class RedisService {
         redisTemplate.expire(MY_LIST, REDIS_EXPIRATION_TIME, TimeUnit.HOURS);
     }
 
-    public Account getData() {
+    public synchronized Account getData() {
         String data = "";
         if (Objects.nonNull(redisTemplate.opsForList().leftPop(MY_LIST).toString()))
          data = redisTemplate.opsForList().leftPop(MY_LIST).toString();
@@ -95,5 +103,61 @@ public class RedisService {
             }
 
         return account;
+    }
+
+
+    public void pushAccountsToRedis(List<Account> accounts) {
+        log.info("Populating redis with list of accounts => {}",accounts);
+        try (Jedis jedis = new Jedis(hostname,port)) {
+            // Get the current size of the Redis list
+            long currentSize = jedis.llen(MY_LIST);
+
+            // Calculate the number of accounts to push
+            int remainingCapacity = MAX - (int) currentSize;
+            int numAccountsToPush = Math.min(accounts.size(), remainingCapacity);
+
+            // Push the accounts to the Redis list
+            ObjectMapper objectMapper = new ObjectMapper();
+            for (int i = 0; i < numAccountsToPush; i++) {
+                Account account = accounts.get(i);
+                String accountJson = objectMapper.writeValueAsString(account);
+                log.info("Json string of account .... => {}",accountJson);
+                jedis.lpush(MY_LIST, accountJson);
+                updateAccount(account);
+            }
+            System.out.println(numAccountsToPush + " accounts pushed to Redis.");
+        } catch (JsonProcessingException e) {
+            log.error("Exception in serializing account :: {}",e.getMessage());
+        }catch (Exception e){
+            log.error("Exception in pushing to redis :: {}",e.getMessage());
+        }
+    }
+    private void updateAccount(Account account) {
+        account.setIsPicked("Y");
+        repository.save(account);
+
+    }
+
+    public  synchronized Account retrieveAccountFromList() {
+
+        try (Jedis jedis = new Jedis(hostname,port)) {
+            String accountJson = jedis.lpop(MY_LIST);
+            System.out.println("Json string gotten");
+            Account account = new Account();
+            if (!Objects.isNull(accountJson)) {
+                account = parseAccountJson(accountJson);
+            }
+            return account;
+        }
+    }
+
+    private Account parseAccountJson(String accountJson) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            return mapper.readValue(accountJson, Account.class);
+        } catch (JsonProcessingException e) {
+            log.error("Parsing account Exception :: {}",e.getMessage());
+            return new Account();
+        }
     }
 }

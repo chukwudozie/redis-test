@@ -6,6 +6,7 @@ import org.springframework.data.redis.core.RedisHash;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -25,5 +26,6 @@ public class Account  implements Serializable {
     private String productCode;
     private String isUsed;
     private String isPicked;
+//    private LocalTime localTime;
 
 }
